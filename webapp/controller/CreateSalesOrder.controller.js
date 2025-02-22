@@ -2,7 +2,7 @@ sap.ui.define([
 	"com/sap/training/ux402/deepinsert/ux402_deepinsert/controller/BaseController",
 	"sap/m/MessageToast",
 	"sap/m/MessageBox"
-], function(Controller, MessageToast, MessageBox) {
+], function (Controller, MessageToast, MessageBox) {
 	"use strict";
 
 	return Controller.extend("com.sap.training.ux402.deepinsert.ux402_deepinsert.controller.CreateSalesOrder", {
@@ -12,18 +12,18 @@ sap.ui.define([
 		 * Can be used to modify the View before it is displayed, to bind event handlers and do other one-time initialization.
 		 * @memberOf com.sap.training.ux402.deepinsert.ux402_deepinsert.view.CreateSalesOrder
 		 */
-		onInit: function() {
-			this.getRouter().getRoute("CreateSalesOrder").attachPatternMatched(this._onRoutePatternMatched, this);			
+		onInit: function () {
+			this.getRouter().getRoute("CreateSalesOrder").attachPatternMatched(this._onRoutePatternMatched, this);
 		},
 
-		_onRoutePatternMatched : function(oEvent) {
+		_onRoutePatternMatched: function (oEvent) {
 			this._setupAddModel();
 		},
 
-		_setupAddModel :  function() {
+		_setupAddModel: function () {
 			var date = new Date();
 			date.setDate(date.getDate() + 7);
-            
+
 			var AMD = {
 				"CustomerID": "100000000",
 				"CustomerName": "SAP",
@@ -31,43 +31,43 @@ sap.ui.define([
 				"CurrencyCode": "USD",
 				"ToLineItems": []
 
-            };
+			};
 
-            var product = {
-                "addProductID" : "",
-                "addNote" : "",
-                "addQuantity" : ""				
-            };
-            
+			var product = {
+				"addProductID": "",
+				"addNote": "",
+				"addQuantity": ""
+			};
+
 			this.createModel = new sap.ui.model.json.JSONModel(AMD);
-            this.productModel = new sap.ui.model.json.JSONModel(product);
+			this.productModel = new sap.ui.model.json.JSONModel(product);
 			this.getView().setModel(this.createModel, "createCollection");
-            this.getView().setModel(this.productModel, "product");
+			this.getView().setModel(this.productModel, "product");
 			this.nextLI = 10;
 		},
 
-		addSalesOrderLI: function() {
-                       
+		addSalesOrderLI: function () {
+
 			// associate controller with the fragment			
 			if (!this.oAddDialog) {
-				this.oAddDialog = sap.ui.xmlfragment("com.sap.training.ux402.deepinsert.ux402_deepinsert.view.CreateLIDialog",this);
+				this.oAddDialog = sap.ui.xmlfragment("com.sap.training.ux402.deepinsert.ux402_deepinsert.view.CreateLIDialog", this);
 				this.getView().addDependent(this.oAddDialog);
 
 				// toggle compact style
 				jQuery.sap.syncStyleClass("sapUiSizeCompact", this.getView(), this.oAddDialog);
-			} else {				
-                this.getView().getModel("product").setProperty("/addProductId", "");
-                this.getView().getModel("product").setProperty("/addNote", "");
-                this.getView().getModel("product").setProperty("/addQuantity", "");
-	
+			} else {
+				this.getView().getModel("product").setProperty("/addProductId", "");
+				this.getView().getModel("product").setProperty("/addNote", "");
+				this.getView().getModel("product").setProperty("/addQuantity", "");
+
 			}
 			this.oAddDialog.open();
 		},
 
-		handleOK: function() {
+		handleOK: function () {
 			var prodID = this.getView().getModel("product").getProperty("/addProductId");
-            var note = this.getView().getModel("product").getProperty("/addNote");
-            var qty = this.getView().getModel("product").getProperty("/addQuantity");
+			var note = this.getView().getModel("product").getProperty("/addNote");
+			var qty = this.getView().getModel("product").getProperty("/addQuantity");
 			var date = new Date();
 			date.setDate(date.getDate() + 7);
 
@@ -88,37 +88,72 @@ sap.ui.define([
 			this.oAddDialog.close();
 		},
 
-		handleCancel: function() {
+		handleCancel: function () {
 			console.log("in handelCancel");
 			this.oAddDialog.close();
 		},
 
 		//Implement function _showSOCreatedSuccess
-       
-		
-		//Implement function _showSOCreatedError
-               
-		
-		onSOSave: function() {
-            MessageToast.show(
-                this.getOwnerComponent().getModel("i18n").getResourceBundle().getText("txtNotImplementedYet"));    
-        },
+		_showSOCreatedSuccess: function (oData, oResponse) {
+			var oResourceModel = this.getOwnerComponent().getModel("i18n");
+			var sMessage = oResourceModel.getResourceBundle().getText("SalesOrderCreated", [oData.SalesOrderID]);
 
-		onSOCancel: function() {
+			MessageBox.show(sMessage, {
+				icon: MessageBox.Icon.SUCCESS,
+				title: oResourceModel.getProperty("sucTitle"),
+				actions: [MessageBox.Action.OK],
+				onClose: function (oAction) {
+					this.getOwnerComponent().getRouter().navTo("main", {}, true);
+				}.bind(this)
+			});
+		},
+
+		//Implement function _showSOCreatedError
+		_showSOCreatedError: function (oError) {
+			try {
+				var oMessage = JSON.parse(oError.responseText);
+				MessageToast.show(oMessage.error.message.value);
+			} catch (err) {
+				MessageToast.show(oError.responseText);
+			}
+		},
+
+		onSOSave: function () {
+			var oDate = new Date();
+			oDate.setDate(oDate.getDate() + 7);
+
+			var sSOData = this.getView().getModel("createCollection").getData();
+			sSOData.CustomerID = this._pad(sSOData.CustomerID, 10);
+
+			for (let i = 0; i < sSOData.ToLineItems.length; i++) {
+				let oLineData = sSOData.ToLineItems[i];
+				oLineData.DeliveryDate = oDate;
+				oLineData.ItemPosition = this._padLeadingZeros(oLineData.ItemPosition, 10).toString();
+			}
+
+			var oModel = this.getOwnerComponent().getModel();
+			oModel.create("/SalesOrderSet", sSOData, {
+				success: $.proxy(this._showSOCreatedSuccess, this),
+				error: this._showSOCreatedError,
+				changeSetId: "CreateSO"
+			})
+		},
+
+		onSOCancel: function () {
 			window.history.go(-1);
-        },
-        
-		onNavBack: function() {
+		},
+
+		onNavBack: function () {
 			window.history.go(-1);
-        },
-        
-		_pad: function(n, width, z) {
+		},
+
+		_pad: function (n, width, z) {
 			z = z || '0';
 			n = n + '';
 			return n.length >= width ? n : new Array(width - n.length + 1).join(z) + n;
 		},
 
-		_padLeadingZeros : function(n, size) {
+		_padLeadingZeros: function (n, size) {
 			let s = n + '';
 			while (s.length < size) s = "0" + s;
 			return s;
